@@ -1,0 +1,20 @@
+{
+ "version": "v4m",
+ "sources": [
+  "http://172.28.4.81:34567/i-liukejun/models/vop294/releases/v4m"
+ ],
+ "families": {
+  "jp61": {
+   "files": {
+    "vocab.json": {
+     "size": 7543,
+     "sha256": "79191f3abc7249c3e89f035441ff9795181f4e1dc6721789473d37c15c7b177a"
+    },
+    "vop294.engine": {
+     "size": 45084964,
+     "sha256": "7ac32206c9e778a3434234d278f1b8617f17b0c97c74a9cb3508de24372c7ccc"
+    }
+   }
+  }
+ }
+}

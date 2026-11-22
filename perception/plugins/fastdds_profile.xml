@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!--
+  Fast-DDS participant profile for the perception bundle (loaded by main.py (plugins/ is copied into the image) when the
+  environment does not already point FASTRTPS_DEFAULT_PROFILES_FILE elsewhere).
+
+  Why: with the default builtin transports a same-host publisher hands samples over the
+  shared-memory transport, whose default segment is 512 KB. A BEST_EFFORT CompressedImage
+  larger than that (a 0.7 MB webp, a 5-7 MB phone JPEG) never arrives and no error is raised;
+  measured on the Orin with a314:v4: 0/13 images >= 0.7 MB answered, 4/4 below.
+  This participant therefore only offers UDPv4 (loopback on the same host), with socket
+  buffers large enough for a multi-MB fragmented sample.
+-->
+<profiles xmlns="http://www.eprosima.com/XMLSchemas/fastRTPS_Profiles">
+  <transport_descriptors>
+    <transport_descriptor>
+      <transport_id>udp_big</transport_id>
+      <type>UDPv4</type>
+      <sendBufferSize>16777216</sendBufferSize>
+      <receiveBufferSize>16777216</receiveBufferSize>
+      <maxMessageSize>65500</maxMessageSize>
+    </transport_descriptor>
+  </transport_descriptors>
+  <participant profile_name="perception_udp_only" is_default_profile="true">
+    <rtps>
+      <userTransports>
+        <transport_id>udp_big</transport_id>
+      </userTransports>
+      <useBuiltinTransports>false</useBuiltinTransports>
+    </rtps>
+  </participant>
+</profiles>
