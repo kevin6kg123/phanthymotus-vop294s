@@ -70,8 +70,9 @@ class BoardMeta:
     """Per-class thresholds and decode settings read from vocab.json."""
 
     def __init__(self, classes: list[str], thresholds: dict, default_conf: float,
-                 decode: str = "e2e", nms_iou: float = 0.7, max_det: int = 300):
+                 decode: str = "e2e", nms_iou: float = 0.7, max_det: int = 300, topk: int = 1):
         self.classes = classes
+        self.topk = int(topk)
         self.decode = decode
         self.nms_iou = float(nms_iou)
         self.max_det = int(max_det)
@@ -87,7 +88,8 @@ class BoardMeta:
         if not isinstance(d, dict) or "thresholds" not in d:
             return None
         return cls(list(d["classes"]), d["thresholds"], float(d.get("default_conf", 0.15)),
-                   d.get("decode", "e2e"), d.get("nms_iou", 0.7), d.get("max_det", 300))
+                   d.get("decode", "e2e"), d.get("nms_iou", 0.7), d.get("max_det", 300),
+                   d.get("topk", 1))
 
 
 def _nms_xyxy(boxes: np.ndarray, scores: np.ndarray, iou: float) -> np.ndarray:
@@ -123,13 +125,29 @@ def decode(outputs, meta_lb, board: BoardMeta):
                 break
         if arr is not None:
             cls_scores = arr[4:]                                 # (nc, N)
-            cid = cls_scores.argmax(0)
-            sc = cls_scores[cid, np.arange(cls_scores.shape[1])]
-            m = sc >= board.thr[cid]
-            if not m.any():
-                e = np.empty((0, 4), np.float32)
-                return e, np.empty(0, np.float32), np.empty(0, np.int32)
-            xywh, sc, cid = arr[:4, m].T, sc[m], cid[m]
+            if board.topk > 1:
+                # multi-label: every (anchor, class) among the anchor's top-k whose score clears that
+                # class's own threshold. A child class (office chair, jar, notebook) that is the
+                # runner-up to its parent on the same anchor is no longer silently dropped; in a
+                # per-class macro F1 an extra box only ever costs its own class.
+                k = min(board.topk, cls_scores.shape[0])
+                top = np.argpartition(-cls_scores, k - 1, axis=0)[:k]          # (k, N)
+                aidx = np.broadcast_to(np.arange(cls_scores.shape[1]), top.shape)
+                cid, anc = top.ravel(), aidx.ravel()
+                sc = cls_scores[cid, anc]
+                m = sc >= board.thr[cid]
+                if not m.any():
+                    e = np.empty((0, 4), np.float32)
+                    return e, np.empty(0, np.float32), np.empty(0, np.int32)
+                xywh, sc, cid = arr[:4, anc[m]].T, sc[m], cid[m]
+            else:
+                cid = cls_scores.argmax(0)
+                sc = cls_scores[cid, np.arange(cls_scores.shape[1])]
+                m = sc >= board.thr[cid]
+                if not m.any():
+                    e = np.empty((0, 4), np.float32)
+                    return e, np.empty(0, np.float32), np.empty(0, np.int32)
+                xywh, sc, cid = arr[:4, m].T, sc[m], cid[m]
             xyxy = np.concatenate([xywh[:, :2] - xywh[:, 2:] / 2, xywh[:, :2] + xywh[:, 2:] / 2], 1)
             off = cid[:, None].astype(np.float32) * 8192.0           # class-aware NMS
             keep = _nms_xyxy(xyxy + off, sc, board.nms_iou)[: board.max_det]
